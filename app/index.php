@@ -86,11 +86,6 @@
                                 <option value="">Semua OS (Tidak ada preferensi)</option>
                                 <option value="Windows 11">Windows 11</option>
                                 <option value="Windows 10">Windows 10</option>
-                                <option value="Mac">Mac OS</option>
-                                <option value="Chrome">Chrome OS</option>
-                                <option value="Ubuntu">Linux/Ubuntu</option>
-                                <option value="Android">Android OS</option>
-                                <option value="DOS">DOS / No OS</option>
                             </select>
                             <i class='bx bx-chevron-down select-arrow'></i>
                         </div>
@@ -106,16 +101,12 @@
                                 <option value="HP">HP</option>
                                 <option value="Acer">Acer</option>
                                 <option value="Lenovo">Lenovo</option>
-                                <option value="Apple">Apple</option>
                                 <option value="Dell">Dell</option>
                                 <option value="Asus">Asus</option>
-                                <option value="Samsung">Samsung</option>
                                 <option value="MSI">MSI</option>
-                                <option value="Xiaomi">Xiaomi</option>
-                                <option value="Infinix">Infinix</option>
                                 <option value="Microsoft">Microsoft</option>
                                 <option value="Razer">Razer</option>
-                                <option value="Gigabyte">Gigabyte</option>
+                                <option value="Axioo">Axioo</option>
                             </select>
                             <i class='bx bx-chevron-down select-arrow'></i>
                         </div>

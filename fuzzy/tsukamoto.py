@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 ============================================================
-  MESIN INFERENSI FUZZY TSUKAMOTO
-  Metode: Output menggunakan fungsi keanggotaan MONOTON
-          (naik untuk TINGGI, turun untuk RENDAH)
-  Defuzzifikasi: Rata-rata terbobot (Weighted Average)
+  MESIN INFERENSI FUZZY TSUKAMOTO (Takagi-TSUKAMOTO-Kang) ORDE NOL
+  Metode: Output berupa KONSTANTA per aturan
+  Defuzzifikasi: Weighted Average  z = SUM(wi * zi) / SUM(wi)
 
   Input (via stdin): JSON berisi daftar laptop dengan field:
     - price       (float)  : harga dalam Rupiah
@@ -22,7 +21,6 @@
 
 import sys
 import json
-import math
 
 
 # ============================================================
@@ -48,46 +46,26 @@ def trimf(x, a, b, c):
 
 
 # ============================================================
-# FUNGSI KEANGGOTAAN OUTPUT MONOTON (TSUKAMOTO)
+# KONSTANTA OUTPUT TSUKAMOTO ORDE NOL
+# Setiap konsekuen aturan adalah sebuah nilai konstanta z
 # ============================================================
-
-def z_tinggi(alpha):
-    """
-    Output TINGGI: Monoton NAIK.
-    mu_tinggi(z) = z / 100  =>  z = alpha * 100
-    Domain: [0, 100]
-    """
-    return alpha * 100.0
-
-
-def z_rendah(alpha):
-    """
-    Output RENDAH: Monoton TURUN.
-    mu_rendah(z) = (100 - z) / 100  =>  z = 100 - alpha * 100
-    Domain: [0, 100]
-    """
-    return 100.0 - (alpha * 100.0)
-
-
-def z_sedang(alpha):
-    """
-    Output SEDANG: Monoton NAIK dari 30 ke 70.
-    z = 30 + alpha * 40
-    """
-    return 30.0 + (alpha * 40.0)
+Z_SANGAT_TINGGI = 100   # Sangat Direkomendasikan
+Z_TINGGI        = 85    # Direkomendasikan
+Z_SEDANG        = 60    # Cukup
+Z_RENDAH        = 30    # Kurang Direkomendasikan
+Z_SANGAT_RENDAH = 10    # Tidak Direkomendasikan
 
 
 # ============================================================
 # MESIN INFERENSI TSUKAMOTO
 # ============================================================
 
-def inferensi_tsukamoto(laptop, budget, profile):
+def inferensi_TSUKAMOTO(laptop, budget, profile):
     """
-    Menghitung skor rekomendasi dengan Metode Tsukamoto.
+    Menghitung skor rekomendasi dengan Metode TSUKAMOTO Orde Nol.
     
-    Setiap aturan menghasilkan nilai alpha (derajat kebenaran),
-    lalu z dihitung dari INVERS fungsi keanggotaan monoton.
-    Defuzzifikasi: z_crisp = Σ(alpha_i * z_i) / Σ(alpha_i)
+    Konsekuen setiap aturan adalah konstanta (z).
+    Defuzzifikasi: z_crisp = SUM(wi * zi) / SUM(wi)
     """
     price        = laptop['price']
     cpu_score    = laptop['cpu_score']
@@ -99,157 +77,99 @@ def inferensi_tsukamoto(laptop, budget, profile):
     # -----------------------------------------------------------
     # FUZZIFIKASI INPUT
     # -----------------------------------------------------------
-    # Variabel Harga
-    mu_harga_murah  = trapz(price, 0, 0, 6_000_000, 12_000_000)
-    mu_harga_sedang = trimf(price, 8_000_000, 15_000_000, 25_000_000)
-    mu_harga_mahal  = trapz(price, 20_000_000, 30_000_000, 1e13, 1e13)
-
-    # Variabel RAM
-    mu_ram_kecil    = trapz(ram, 0, 0, 4, 8)
-    mu_ram_cukup    = trimf(ram, 4, 8, 16)
-    mu_ram_besar    = trapz(ram, 8, 16, 128, 128)
-
-    # Variabel Penyimpanan
-    mu_sim_kecil    = trapz(storage, 0, 0, 256, 512)
-    mu_sim_cukup    = trimf(storage, 256, 512, 1024)
-    mu_sim_besar    = trapz(storage, 512, 1024, 8192, 8192)
-
-    # Variabel Layar
-    mu_layar_kecil   = trapz(display, 0, 0, 11, 13)
-    mu_layar_standar = trimf(display, 12, 14, 16)
-    mu_layar_besar   = trapz(display, 14, 16, 22, 22)
-
-    # Variabel CPU (dipetakan dari cpu_score 0-100)
-    mu_cpu_rendah    = trapz(cpu_score, 0, 0, 35, 55)
-    mu_cpu_sedang    = trimf(cpu_score, 40, 65, 85)
-    mu_cpu_tinggi    = trapz(cpu_score, 70, 85, 100, 100)
-
-    # Variabel GPU (gpu_class 1=integrated s.d. 5=flagship)
-    mu_gpu_basic     = trapz(gpu_class, 0, 1, 1, 2.5)
-    mu_gpu_mid       = trimf(gpu_class, 2, 3, 4)
-    mu_gpu_high      = trapz(gpu_class, 3.5, 4.5, 5.5, 5.5)
-
-    # Kesesuaian Budget (laptop pada sweet-spot 65%-100% dari budget → nilai penuh)
-    mu_budget = trapz(price, 0, budget * 0.5, budget, budget * 1.15)
+    # Harga Ratio
+    harga_ratio = min(1.0, budget / price) if price > 0 else 0
 
     # -----------------------------------------------------------
-    # EVALUASI ATURAN FUZZY (MINIMUM — AND)
-    # rules: daftar tuple (alpha, jenis_output)
-    # jenis_output: 'TINGGI', 'RENDAH', 'SEDANG'
+    # FUZZIFIKASI INPUT
+    # -----------------------------------------------------------
+    mu_harga_mahal  = trimf(harga_ratio, 0, 0, 0.5)
+    mu_harga_normal = trimf(harga_ratio, 0.3, 0.65, 0.9)
+    mu_harga_murah  = trimf(harga_ratio, 0.7, 1.0, 1.0)
+
+    mu_ram_kecil    = trapz(ram, 0, 0, 4, 8)
+    mu_ram_cukup    = trimf(ram, 4, 16, 32)
+    mu_ram_besar    = trapz(ram, 16, 32, 64, 64)
+
+    mu_sim_kecil    = trapz(storage, 0, 0, 128, 256)
+    mu_sim_cukup    = trimf(storage, 128, 512, 1024)
+    mu_sim_besar    = trapz(storage, 512, 1024, 4096, 4096)
+
+    mu_cpu_rendah    = trapz(cpu_score, 0, 0, 30, 50)
+    mu_cpu_sedang    = trimf(cpu_score, 30, 60, 80)
+    mu_cpu_tinggi    = trapz(cpu_score, 60, 100, 100, 100)
+
+    mu_gpu_integrated = trapz(gpu_class, 0, 0, 15, 35)
+    mu_gpu_entry     = trimf(gpu_class, 20, 40, 60)
+    mu_gpu_mid       = trimf(gpu_class, 50, 70, 85)
+    mu_gpu_high      = trapz(gpu_class, 75, 95, 100, 100)
+
+    # -----------------------------------------------------------
+    # DEFINISI ATURAN FUZZY â†’ KONSTANTA OUTPUT (TSUKAMOTO ORDE NOL)
+    # Format: (bobot / alpha, konstanta_z, deskripsi)
     # -----------------------------------------------------------
     rules = []
 
-    # ── Aturan UMUM (berlaku semua profil) ──────────────────────
-    # R1: Harga MURAH AND RAM BESAR AND Simpan BESAR → TINGGI (Nilai Luar Biasa)
-    rules.append((min(mu_harga_murah, mu_ram_besar, mu_sim_besar), 'TINGGI'))
+    # 17 Aturan yang diwajibkan:
+    rules.append((min(mu_cpu_tinggi, mu_gpu_high, mu_ram_besar, mu_sim_besar), 98, "Spek flagship: CPU Tinggi, GPU High, RAM & Storage Besar."))
+    rules.append((min(mu_cpu_tinggi, mu_gpu_mid, mu_ram_besar), 85, "Performa gaming/desain mantap (CPU Tinggi, GPU Mid, RAM Besar)."))
+    rules.append((min(mu_cpu_sedang, mu_gpu_entry, mu_ram_cukup), 65, "Spesifikasi pas untuk entry-level multimedia."))
+    rules.append((min(mu_cpu_sedang, mu_gpu_integrated, mu_ram_cukup), 50, "Cukup untuk produktivitas ringan dan tugas kantor."))
+    rules.append((min(mu_cpu_rendah, mu_gpu_integrated, mu_ram_kecil), 30, "Spesifikasi minimalis, tidak disarankan untuk beban berat."))
+    rules.append((mu_harga_murah, 100, "Harga jauh di bawah budget Anda (Sangat Murah)."))
+    rules.append((mu_harga_normal, 70, "Harga wajar sesuai dengan budget Anda."))
+    rules.append((mu_harga_mahal, 40, "Harga mendekati batas atas budget Anda."))
+    rules.append((min(mu_cpu_tinggi, mu_gpu_high, mu_harga_mahal), 90, "Spek premium meski harganya mahal."))
+    rules.append((min(mu_cpu_sedang, mu_gpu_entry, mu_harga_murah), 75, "Value for money: Spek lumayan dengan harga murah."))
+    rules.append((min(mu_ram_besar, mu_sim_besar, mu_gpu_mid), 80, "Kapasitas RAM & Storage memuaskan ditambah GPU menengah."))
+    rules.append((min(mu_ram_kecil, mu_gpu_integrated), 20, "Hanya cocok untuk sekadar ngetik (RAM kecil & GPU integrated)."))
+    rules.append((min(mu_cpu_tinggi, mu_ram_cukup, mu_gpu_integrated), 55, "Prosesor kencang tapi tertahan oleh ketiadaan GPU dedicated."))
+    rules.append((min(mu_harga_murah, mu_cpu_sedang, mu_gpu_entry), 80, "Rekomendasi kuat: spek cukup baik dengan harga sangat bersahabat."))
+    rules.append((min(mu_harga_mahal, mu_gpu_high, mu_ram_besar), 95, "Investasi layak: GPU kencang dan RAM besar meski harga maksimal."))
+    rules.append((min(mu_cpu_tinggi, mu_gpu_entry), 60, "Kombinasi CPU tinggi namun GPU kurang bertenaga."))
+    rules.append((min(mu_sim_besar, mu_harga_murah), 85, "Laptop penyimpanan besar dengan harga terjangkau."))
 
-    # R2: Harga MAHAL AND RAM KECIL AND Simpan KECIL → RENDAH (Tidak Worthit)
-    rules.append((min(mu_harga_mahal, mu_ram_kecil, mu_sim_kecil), 'RENDAH'))
-
-    # R3: Harga SEDANG AND RAM CUKUP AND Layar STANDAR → SEDANG
-    rules.append((min(mu_harga_sedang, mu_ram_cukup, mu_layar_standar), 'SEDANG'))
-
-    # R4: Harga MURAH AND CPU TINGGI → TINGGI
-    rules.append((min(mu_harga_murah, mu_cpu_tinggi), 'TINGGI'))
-
-    # R5: Harga MAHAL AND CPU RENDAH → RENDAH
-    rules.append((min(mu_harga_mahal, mu_cpu_rendah), 'RENDAH'))
-
-    # R6: RAM BESAR AND Simpan BESAR AND CPU SEDANG → TINGGI
-    rules.append((min(mu_ram_besar, mu_sim_besar, mu_cpu_sedang), 'TINGGI'))
-
-    # R7: RAM KECIL AND CPU RENDAH → RENDAH
-    rules.append((min(mu_ram_kecil, mu_cpu_rendah), 'RENDAH'))
-
-    # R8: GPU HIGH AND CPU TINGGI AND RAM BESAR → TINGGI
-    rules.append((min(mu_gpu_high, mu_cpu_tinggi, mu_ram_besar), 'TINGGI'))
-
-    # ── Aturan SPESIFIK PER PROFIL ───────────────────────────────
-    if profile == 'Pemrograman / Data Science':
-        # R9: CPU TINGGI AND RAM BESAR → TINGGI
-        rules.append((min(mu_cpu_tinggi, mu_ram_besar), 'TINGGI'))
-        # R10: CPU RENDAH → RENDAH
-        rules.append((mu_cpu_rendah, 'RENDAH'))
-        # R11: Simpan BESAR AND RAM BESAR → TINGGI (data science butuh storage)
-        rules.append((min(mu_sim_besar, mu_ram_besar), 'TINGGI'))
-
-    elif profile == 'Desain Grafis / Multimedia':
-        # R9: GPU HIGH AND CPU TINGGI → TINGGI
-        rules.append((min(mu_gpu_high, mu_cpu_tinggi), 'TINGGI'))
-        # R10: GPU BASIC → RENDAH
-        rules.append((mu_gpu_basic, 'RENDAH'))
-        # R11: Layar BESAR AND GPU HIGH → TINGGI
-        rules.append((min(mu_layar_besar, mu_gpu_high), 'TINGGI'))
-
-    elif profile == 'Gaming':
-        # R9: GPU HIGH AND CPU TINGGI AND RAM BESAR → TINGGI
-        rules.append((min(mu_gpu_high, mu_cpu_tinggi, mu_ram_besar), 'TINGGI'))
-        # R10: GPU BASIC → RENDAH
-        rules.append((mu_gpu_basic, 'RENDAH'))
-        # R11: GPU MID AND CPU SEDANG → SEDANG
-        rules.append((min(mu_gpu_mid, mu_cpu_sedang), 'SEDANG'))
-
-    else:  # Administrasi / Tugas Umum
-        # R9: Harga MURAH AND RAM CUKUP → TINGGI
-        rules.append((min(mu_harga_murah, mu_ram_cukup), 'TINGGI'))
-        # R10: RAM KECIL → RENDAH
-        rules.append((mu_ram_kecil, 'RENDAH'))
-        # R11: CPU SEDANG AND RAM CUKUP AND Harga SEDANG → SEDANG
-        rules.append((min(mu_cpu_sedang, mu_ram_cukup, mu_harga_sedang), 'SEDANG'))
-
-    # DEFUZZIFIKASI -- RATA-RATA TERBOBOT (TSUKAMOTO)
-    # z_i dihitung dari INVERS fungsi keanggotaan monoton
-    # z_crisp = SUM(alpha_i * z_i) / SUM(alpha_i)
+    # DEFUZZIFIKASI -- WEIGHTED AVERAGE (TSUKAMOTO ORDE NOL)
     pembilang = 0.0
-    penyebut = 0.0
-    alasan_aturan = []
+    penyebut  = 0.0
+    aturan_aktif = []
+    best_reason  = "Tidak ada aturan yang aktif secara signifikan."
 
-    for alpha, jenis in rules:
+    for alpha, z_konst, deskripsi in rules:
         if alpha > 0.0:
-            # Hitung z dari invers fungsi keanggotaan monoton
-            if jenis == 'TINGGI':
-                z = z_tinggi(alpha)
-            elif jenis == 'RENDAH':
-                z = z_rendah(alpha)
-            else:  # SEDANG
-                z = z_sedang(alpha)
+            pembilang  += alpha * z_konst
+            penyebut   += alpha
+            aturan_aktif.append((alpha, z_konst, deskripsi))
 
-            pembilang += alpha * z
-            penyebut  += alpha
-            alasan_aturan.append(f"α={alpha:.2f} → z={z:.1f} ({jenis})")
-
-    # Kalau tidak ada aturan aktif, nilai default 50
     if penyebut == 0:
-        skor_raw = 50.0
+        skor_final = 30.0 # base score
     else:
-        skor_raw = pembilang / penyebut
-
-    # Kalikan dengan kesesuaian budget (bobot budget)
-    skor_final = round(skor_raw * mu_budget, 4)
+        skor_final = round(pembilang / penyebut, 4)
 
     # Tentukan label interpretasi
     if skor_final >= 70:
         label = "Sangat Direkomendasikan"
-    elif skor_final >= 40:
-        label = "Cukup Direkomendasikan"
+    elif skor_final >= 50:
+        label = "Direkomendasikan"
     else:
-        label = "Tidak Direkomendasikan"
+        label = "Cukup Direkomendasikan"
 
-    alasan_str = (
-        f"[TSUKAMOTO] Defuzzifikasi rata-rata terbobot: "
-        f"z_crisp={skor_raw:.2f} x budget_match={mu_budget:.2f} = {skor_final:.2f}. "
-        f"Aturan aktif: {'; '.join(alasan_aturan[:3])}."
-    )
+    # Pilih deskripsi aturan dengan alpha tertinggi sebagai "alasan utama"
+    if aturan_aktif:
+        aturan_aktif.sort(key=lambda x: x[0], reverse=True)
+        best_reason = aturan_aktif[0][2]
+
+    alasan_str = f"Skor Fuzzy: {skor_final:.1f}/100. Alasan utama: {best_reason}"
 
     return skor_final, alasan_str, label
 
 
 # ============================================================
-# MAIN — Membaca input JSON, menghitung, mencetak output JSON
+# MAIN â€” Membaca input JSON, menghitung, mencetak output JSON
 # ============================================================
 
 def main():
-    # Paksa stdout dan stdin menggunakan UTF-8 agar karakter Yunani/Unicode tidak error di Windows
+    # Paksa stdout dan stdin menggunakan UTF-8 agar tidak error di Windows (cp1252)
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
@@ -267,7 +187,7 @@ def main():
     results = []
     for laptop in laptops:
         try:
-            skor, alasan, label = inferensi_tsukamoto(laptop, budget, profile)
+            skor, alasan, label = inferensi_TSUKAMOTO(laptop, budget, profile)
             if skor > 3:
                 results.append({
                     "nomor"  : laptop.get("nomor", 0),
@@ -280,17 +200,22 @@ def main():
                     "storage": f"{int(laptop.get('storage_gb', 0))} GB",
                     "display": f"{laptop.get('display_size', 0)}\"",
                     "os"     : laptop.get("Sistem Operasi", "N/A"),
+                    "garansi": laptop.get("Garansi", "-"),
+                    "tipe_layar": laptop.get("Tipe Layar", "-"),
+                    "keyboard": laptop.get("Keyboard", "-"),
+                    "berat"  : laptop.get("Berat", "-"),
+                    "dimensi": laptop.get("Dimensi", "-"),
                     "score"  : skor,
                     "reason" : alasan,
                     "label"  : label,
                     "method" : "TSUKAMOTO"
                 })
-        except Exception as e:
+        except Exception:
             continue  # Lewati laptop yang gagal diproses
 
-    # Urutkan dari skor tertinggi, ambil 12 terbaik
+    # Urutkan dari skor tertinggi, ambil 10 terbaik
     results.sort(key=lambda x: x["score"], reverse=True)
-    print(json.dumps(results[:12], ensure_ascii=False))
+    print(json.dumps(results[:10], ensure_ascii=False))
 
 
 if __name__ == "__main__":

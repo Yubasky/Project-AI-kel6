@@ -98,29 +98,32 @@ function parseLayar(string $str): float {
  */
 function cpuScore(string $proc): float {
     $lower = strtolower($proc);
-    if (strpos($lower, 'i9') !== false     || strpos($lower, 'ryzen 9') !== false)  return 90;
-    if (strpos($lower, 'i7') !== false     || strpos($lower, 'ryzen 7') !== false)  return 75;
-    if (strpos($lower, 'i5') !== false     || strpos($lower, 'ryzen 5') !== false)  return 60;
-    if (strpos($lower, 'i3') !== false     || strpos($lower, 'ryzen 3') !== false)  return 40;
-    if (strpos($lower, 'pentium') !== false|| strpos($lower, 'celeron') !== false)  return 20;
-    return 50;
+    $is_gen12_13 = preg_match('/12\d{3}|13\d{3}/', $lower);
+    $is_ryzen_6_7 = preg_match('/6\d{3}|7\d{3}/', $lower);
+
+    if (strpos($lower, 'celeron') !== false || strpos($lower, 'pentium') !== false) return 10;
+    if (strpos($lower, 'i9') !== false) return $is_gen12_13 ? 95 : 75;
+    if (strpos($lower, 'i7') !== false) return $is_gen12_13 ? 80 : 60;
+    if (strpos($lower, 'i5') !== false) return $is_gen12_13 ? 65 : 40;
+    if (strpos($lower, 'i3') !== false) return $is_gen12_13 ? 35 : 25;
+
+    if (strpos($lower, 'ryzen 9') !== false) return $is_ryzen_6_7 ? 95 : 75;
+    if (strpos($lower, 'ryzen 7') !== false) return $is_ryzen_6_7 ? 80 : 65;
+    if (strpos($lower, 'ryzen 5') !== false) return $is_ryzen_6_7 ? 65 : 45;
+    if (strpos($lower, 'ryzen 3') !== false) return 30;
+
+    return 30;
 }
 
 /**
- * Memetakan nama VGA ke kelas GPU (1=integrated … 5=flagship)
+ * Memetakan nama VGA ke kelas GPU (0-100)
  */
-function gpuClass(string $vga): float {
+function gpuScore(string $vga): float {
     $lower = strtolower($vga);
-    if (strpos($lower, '4090') !== false || strpos($lower, '4080') !== false
-     || strpos($lower, '3090') !== false || strpos($lower, '3080') !== false)    return 5;
-    if (strpos($lower, '4070') !== false || strpos($lower, '3070') !== false
-     || strpos($lower, '4060') !== false || strpos($lower, '3060') !== false)    return 4;
-    if (strpos($lower, '4050') !== false || strpos($lower, '3050') !== false
-     || strpos($lower, '2060') !== false || strpos($lower, '1660') !== false
-     || strpos($lower, '1650') !== false || strpos($lower, '2050') !== false)    return 3;
-    if (strpos($lower, 'mx') !== false   || strpos($lower, 'radeon') !== false
-     || strpos($lower, 'vega') !== false || strpos($lower, '1050') !== false)    return 2;
-    return 1; // Integrated / tidak diketahui
+    if (preg_match('/3070|3080|4070|4080|4090|rx 6800|rx 6900/', $lower)) return 95;
+    if (preg_match('/3060|4050|4060|rx 6600|rx 7600/', $lower)) return 70;
+    if (preg_match('/mx|1650|2050|3050/', $lower)) return 40;
+    return 15; // Integrated
 }
 
 // ── Baca CSV ─────────────────────────────────────────────────────
@@ -153,7 +156,7 @@ while (($row = fgetcsv($handle)) !== false) {
     $storage     = parsePenyimpanan($l['Penyimpanan'] ?? '256GB');
     $display     = parseLayar($l['Ukuran Layar']  ?? '14 Inch');
     $cpu_sc      = cpuScore($l['Processor']       ?? '');
-    $gpu_cl      = gpuClass($l['VGA']             ?? '');
+    $gpu_cl      = gpuScore($l['VGA']             ?? '');
     $brand       = trim($l['Brand']               ?? 'N/A');
     $os          = trim($l['Sistem Operasi']      ?? '');
 
@@ -161,9 +164,35 @@ while (($row = fgetcsv($handle)) !== false) {
     if (!empty($brandPref) && strcasecmp($brand, $brandPref) !== 0) continue;
     if (!empty($osPref)    && stripos($os, $osPref) === false)       continue;
     if ($minDisplay > 0    && $display < $minDisplay)                continue;
-    // Saring: hanya laptop yang harganya dalam jangkauan budget (maks 115%)
-    if ($price > $budget * 1.15)                                     continue;
-    if ($price <= 0)                                                  continue;
+    
+    // Saring harga (maks 100% dari budget)
+    if ($price > $budget) continue;
+    if ($price <= 0) continue;
+
+    // --- Hard Filter Profil Akademik ---
+    $cpuStr = strtolower(trim($l['Processor'] ?? ''));
+    $gpuStr = strtolower(trim($l['VGA'] ?? ''));
+    
+    if (strpos($profile, 'Pemrograman') !== false) {
+        if (strpos($cpuStr, 'i3') !== false || strpos($cpuStr, 'celeron') !== false || strpos($cpuStr, 'pentium') !== false || strpos($cpuStr, 'ryzen 3') !== false) continue;
+        if ($ram < 8 || $storage < 256) continue;
+    } 
+    elseif (strpos($profile, 'Desain') !== false) {
+        if (!preg_match('/i7|i9|ryzen 7|ryzen 9/', $cpuStr)) continue;
+        if ($ram < 16 || $storage < 512) continue;
+        if (strpos($gpuStr, 'integrated') !== false || strpos($gpuStr, 'graphics') !== false || strpos($gpuStr, 'uhd') !== false || strpos($gpuStr, 'iris') !== false || $gpuStr === 'amd radeon') {
+            if (strpos($gpuStr, 'nvidia') === false && strpos($gpuStr, 'rtx') === false && strpos($gpuStr, 'gtx') === false && strpos($gpuStr, 'rx 6') === false && strpos($gpuStr, 'rx 7') === false) continue;
+        }
+    }
+    elseif (strpos($profile, 'Administrasi') !== false) {
+        if (strpos($cpuStr, 'celeron') !== false || strpos($cpuStr, 'pentium') !== false) continue;
+        if ($ram < 4 || $storage < 256) continue;
+    }
+    elseif (strpos($profile, 'Gaming') !== false) {
+        if (!preg_match('/i7|i9|ryzen 7|ryzen 9/', $cpuStr)) continue;
+        if ($ram < 16 || $storage < 512) continue;
+        if ($gpu_cl < 70) continue; // mid-high dedicated GPU
+    }
 
     // --- Satukan semua data ke array ---
     $laptops[] = [
@@ -179,6 +208,11 @@ while (($row = fgetcsv($handle)) !== false) {
         'display_size' => $display,
         'cpu_score'    => $cpu_sc,
         'gpu_class'    => $gpu_cl,
+        'Garansi'      => trim($l['Garansi'] ?? '-'),
+        'Tipe Layar'   => trim($l['Tipe Layar'] ?? '-'),
+        'Keyboard'     => trim($l['Keyboard'] ?? '-'),
+        'Berat'        => trim($l['Berat'] ?? '-'),
+        'Dimensi'      => trim($l['Dimensi'] ?? '-')
     ];
 }
 fclose($handle);

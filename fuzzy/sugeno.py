@@ -77,38 +77,32 @@ def inferensi_sugeno(laptop, budget, profile):
     # -----------------------------------------------------------
     # FUZZIFIKASI INPUT
     # -----------------------------------------------------------
-    # Variabel Harga
-    mu_harga_murah  = trapz(price, 0, 0, 6_000_000, 12_000_000)
-    mu_harga_sedang = trimf(price, 8_000_000, 15_000_000, 25_000_000)
-    mu_harga_mahal  = trapz(price, 20_000_000, 30_000_000, 1e13, 1e13)
+    # Harga Ratio
+    harga_ratio = min(1.0, budget / price) if price > 0 else 0
 
-    # Variabel RAM
+    # -----------------------------------------------------------
+    # FUZZIFIKASI INPUT
+    # -----------------------------------------------------------
+    mu_harga_mahal  = trimf(harga_ratio, 0, 0, 0.5)
+    mu_harga_normal = trimf(harga_ratio, 0.3, 0.65, 0.9)
+    mu_harga_murah  = trimf(harga_ratio, 0.7, 1.0, 1.0)
+
     mu_ram_kecil    = trapz(ram, 0, 0, 4, 8)
-    mu_ram_cukup    = trimf(ram, 4, 8, 16)
-    mu_ram_besar    = trapz(ram, 8, 16, 128, 128)
+    mu_ram_cukup    = trimf(ram, 4, 16, 32)
+    mu_ram_besar    = trapz(ram, 16, 32, 64, 64)
 
-    # Variabel Penyimpanan
-    mu_sim_kecil    = trapz(storage, 0, 0, 256, 512)
-    mu_sim_cukup    = trimf(storage, 256, 512, 1024)
-    mu_sim_besar    = trapz(storage, 512, 1024, 8192, 8192)
+    mu_sim_kecil    = trapz(storage, 0, 0, 128, 256)
+    mu_sim_cukup    = trimf(storage, 128, 512, 1024)
+    mu_sim_besar    = trapz(storage, 512, 1024, 4096, 4096)
 
-    # Variabel Layar
-    mu_layar_kecil   = trapz(display, 0, 0, 11, 13)
-    mu_layar_standar = trimf(display, 12, 14, 16)
-    mu_layar_besar   = trapz(display, 14, 16, 22, 22)
+    mu_cpu_rendah    = trapz(cpu_score, 0, 0, 30, 50)
+    mu_cpu_sedang    = trimf(cpu_score, 30, 60, 80)
+    mu_cpu_tinggi    = trapz(cpu_score, 60, 100, 100, 100)
 
-    # Variabel CPU (dipetakan dari cpu_score 0-100)
-    mu_cpu_rendah    = trapz(cpu_score, 0, 0, 35, 55)
-    mu_cpu_sedang    = trimf(cpu_score, 40, 65, 85)
-    mu_cpu_tinggi    = trapz(cpu_score, 70, 85, 100, 100)
-
-    # Variabel GPU (gpu_class 1=integrated s.d. 5=flagship)
-    mu_gpu_basic     = trapz(gpu_class, 0, 1, 1, 2.5)
-    mu_gpu_mid       = trimf(gpu_class, 2, 3, 4)
-    mu_gpu_high      = trapz(gpu_class, 3.5, 4.5, 5.5, 5.5)
-
-    # Kesesuaian Budget (sweet-spot 65%-100% dari budget → nilai penuh)
-    mu_budget = trapz(price, 0, budget * 0.5, budget, budget * 1.15)
+    mu_gpu_integrated = trapz(gpu_class, 0, 0, 15, 35)
+    mu_gpu_entry     = trimf(gpu_class, 20, 40, 60)
+    mu_gpu_mid       = trimf(gpu_class, 50, 70, 85)
+    mu_gpu_high      = trapz(gpu_class, 75, 95, 100, 100)
 
     # -----------------------------------------------------------
     # DEFINISI ATURAN FUZZY → KONSTANTA OUTPUT (SUGENO ORDE NOL)
@@ -116,90 +110,30 @@ def inferensi_sugeno(laptop, budget, profile):
     # -----------------------------------------------------------
     rules = []
 
-    # ── Aturan UMUM ─────────────────────────────────────────────
-    # R1: Harga MURAH AND RAM BESAR AND Simpan BESAR → SANGAT TINGGI
-    rules.append((min(mu_harga_murah, mu_ram_besar, mu_sim_besar), Z_SANGAT_TINGGI,
-                  "Harga terjangkau + RAM & Storage besar = value sangat tinggi."))
-
-    # R2: Harga MAHAL AND RAM KECIL AND Simpan KECIL → SANGAT RENDAH
-    rules.append((min(mu_harga_mahal, mu_ram_kecil, mu_sim_kecil), Z_SANGAT_RENDAH,
-                  "Harga mahal namun spesifikasi RAM & Storage sangat minim."))
-
-    # R3: Harga SEDANG AND RAM CUKUP AND Layar STANDAR → SEDANG
-    rules.append((min(mu_harga_sedang, mu_ram_cukup, mu_layar_standar), Z_SEDANG,
-                  "Spesifikasi seimbang dengan harga menengah."))
-
-    # R4: Harga MURAH AND CPU TINGGI → TINGGI
-    rules.append((min(mu_harga_murah, mu_cpu_tinggi), Z_TINGGI,
-                  "Harga murah dengan prosesor berperforma tinggi — value terbaik."))
-
-    # R5: Harga MAHAL AND CPU RENDAH → RENDAH
-    rules.append((min(mu_harga_mahal, mu_cpu_rendah), Z_RENDAH,
-                  "Harga premium tapi CPU rendah — tidak worth it."))
-
-    # R6: RAM BESAR AND Simpan BESAR AND CPU SEDANG → TINGGI
-    rules.append((min(mu_ram_besar, mu_sim_besar, mu_cpu_sedang), Z_TINGGI,
-                  "Kapasitas RAM & Storage besar mendukung produktivitas tinggi."))
-
-    # R7: RAM KECIL AND CPU RENDAH → SANGAT RENDAH
-    rules.append((min(mu_ram_kecil, mu_cpu_rendah), Z_SANGAT_RENDAH,
-                  "RAM dan CPU sama-sama rendah, kinerja sangat terbatas."))
-
-    # R8: GPU HIGH AND CPU TINGGI AND RAM BESAR → SANGAT TINGGI
-    rules.append((min(mu_gpu_high, mu_cpu_tinggi, mu_ram_besar), Z_SANGAT_TINGGI,
-                  "Trifecta sempurna: GPU, CPU, dan RAM kelas atas."))
-
-    # ── Aturan SPESIFIK PER PROFIL ───────────────────────────────
-    if profile == 'Pemrograman / Data Science':
-        # R9: CPU TINGGI AND RAM BESAR → SANGAT TINGGI
-        rules.append((min(mu_cpu_tinggi, mu_ram_besar), Z_SANGAT_TINGGI,
-                      "[Coding] Spek monster: CPU & RAM terbaik untuk kompilasi & ML."))
-        # R10: CPU RENDAH → RENDAH
-        rules.append((mu_cpu_rendah, Z_RENDAH,
-                      "[Coding] Prosesor kurang bertenaga untuk pengembangan software."))
-        # R11: Simpan BESAR AND RAM BESAR → TINGGI (data science butuh storage)
-        rules.append((min(mu_sim_besar, mu_ram_besar), Z_TINGGI,
-                      "[Coding] Storage & RAM besar mendukung dataset besar dan VM."))
-
-    elif profile == 'Desain Grafis / Multimedia':
-        # R9: GPU HIGH AND CPU TINGGI → SANGAT TINGGI
-        rules.append((min(mu_gpu_high, mu_cpu_tinggi), Z_SANGAT_TINGGI,
-                      "[Desain] Kombinasi GPU & CPU terbaik untuk rendering 3D."))
-        # R10: GPU BASIC → SANGAT RENDAH
-        rules.append((mu_gpu_basic, Z_SANGAT_RENDAH,
-                      "[Desain] GPU Integrated tidak disarankan untuk desain profesional."))
-        # R11: Layar BESAR AND GPU HIGH → TINGGI
-        rules.append((min(mu_layar_besar, mu_gpu_high), Z_TINGGI,
-                      "[Desain] Layar besar + GPU kuat = pengalaman desain yang nyaman."))
-
-    elif profile == 'Gaming':
-        # R9: GPU HIGH AND CPU TINGGI AND RAM BESAR → SANGAT TINGGI
-        rules.append((min(mu_gpu_high, mu_cpu_tinggi, mu_ram_besar), Z_SANGAT_TINGGI,
-                      "[Gaming] Gaming beast: siap libas game AAA di ultra settings."))
-        # R10: GPU BASIC → SANGAT RENDAH
-        rules.append((mu_gpu_basic, Z_SANGAT_RENDAH,
-                      "[Gaming] Bukan laptop gaming: GPU terlalu lemah untuk game modern."))
-        # R11: GPU MID AND CPU SEDANG → SEDANG
-        rules.append((min(mu_gpu_mid, mu_cpu_sedang), Z_SEDANG,
-                      "[Gaming] Mampu menjalankan game populer pada setting medium."))
-
-    else:  # Administrasi / Tugas Umum
-        # R9: Harga MURAH AND RAM CUKUP → TINGGI
-        rules.append((min(mu_harga_murah, mu_ram_cukup), Z_TINGGI,
-                      "[Umum] Pilihan cerdas: harga terjangkau dengan RAM cukup."))
-        # R10: RAM KECIL → RENDAH
-        rules.append((mu_ram_kecil, Z_RENDAH,
-                      "[Umum] RAM 4GB atau kurang akan terasa lambat untuk multitasking."))
-        # R11: CPU SEDANG AND RAM CUKUP → SEDANG
-        rules.append((min(mu_cpu_sedang, mu_ram_cukup), Z_SEDANG,
-                      "[Umum] Spesifikasi standar cocok untuk keperluan umum sehari-hari."))
+    # 17 Aturan yang diwajibkan:
+    rules.append((min(mu_cpu_tinggi, mu_gpu_high, mu_ram_besar, mu_sim_besar), 98, "Spek flagship: CPU Tinggi, GPU High, RAM & Storage Besar."))
+    rules.append((min(mu_cpu_tinggi, mu_gpu_mid, mu_ram_besar), 85, "Performa gaming/desain mantap (CPU Tinggi, GPU Mid, RAM Besar)."))
+    rules.append((min(mu_cpu_sedang, mu_gpu_entry, mu_ram_cukup), 65, "Spesifikasi pas untuk entry-level multimedia."))
+    rules.append((min(mu_cpu_sedang, mu_gpu_integrated, mu_ram_cukup), 50, "Cukup untuk produktivitas ringan dan tugas kantor."))
+    rules.append((min(mu_cpu_rendah, mu_gpu_integrated, mu_ram_kecil), 30, "Spesifikasi minimalis, tidak disarankan untuk beban berat."))
+    rules.append((mu_harga_murah, 100, "Harga jauh di bawah budget Anda (Sangat Murah)."))
+    rules.append((mu_harga_normal, 70, "Harga wajar sesuai dengan budget Anda."))
+    rules.append((mu_harga_mahal, 40, "Harga mendekati batas atas budget Anda."))
+    rules.append((min(mu_cpu_tinggi, mu_gpu_high, mu_harga_mahal), 90, "Spek premium meski harganya mahal."))
+    rules.append((min(mu_cpu_sedang, mu_gpu_entry, mu_harga_murah), 75, "Value for money: Spek lumayan dengan harga murah."))
+    rules.append((min(mu_ram_besar, mu_sim_besar, mu_gpu_mid), 80, "Kapasitas RAM & Storage memuaskan ditambah GPU menengah."))
+    rules.append((min(mu_ram_kecil, mu_gpu_integrated), 20, "Hanya cocok untuk sekadar ngetik (RAM kecil & GPU integrated)."))
+    rules.append((min(mu_cpu_tinggi, mu_ram_cukup, mu_gpu_integrated), 55, "Prosesor kencang tapi tertahan oleh ketiadaan GPU dedicated."))
+    rules.append((min(mu_harga_murah, mu_cpu_sedang, mu_gpu_entry), 80, "Rekomendasi kuat: spek cukup baik dengan harga sangat bersahabat."))
+    rules.append((min(mu_harga_mahal, mu_gpu_high, mu_ram_besar), 95, "Investasi layak: GPU kencang dan RAM besar meski harga maksimal."))
+    rules.append((min(mu_cpu_tinggi, mu_gpu_entry), 60, "Kombinasi CPU tinggi namun GPU kurang bertenaga."))
+    rules.append((min(mu_sim_besar, mu_harga_murah), 85, "Laptop penyimpanan besar dengan harga terjangkau."))
 
     # DEFUZZIFIKASI -- WEIGHTED AVERAGE (SUGENO ORDE NOL)
-    # z_crisp = SUM(wi * zi) / SUM(wi)
     pembilang = 0.0
     penyebut  = 0.0
     aturan_aktif = []
-    best_reason  = "Tidak ada aturan yang aktif."
+    best_reason  = "Tidak ada aturan yang aktif secara signifikan."
 
     for alpha, z_konst, deskripsi in rules:
         if alpha > 0.0:
@@ -208,30 +142,24 @@ def inferensi_sugeno(laptop, budget, profile):
             aturan_aktif.append((alpha, z_konst, deskripsi))
 
     if penyebut == 0:
-        skor_raw = 50.0
+        skor_final = 30.0 # base score
     else:
-        skor_raw = pembilang / penyebut
+        skor_final = round(pembilang / penyebut, 4)
+
+    # Tentukan label interpretasi
+    if skor_final >= 70:
+        label = "Sangat Direkomendasikan"
+    elif skor_final >= 50:
+        label = "Direkomendasikan"
+    else:
+        label = "Cukup Direkomendasikan"
 
     # Pilih deskripsi aturan dengan alpha tertinggi sebagai "alasan utama"
     if aturan_aktif:
         aturan_aktif.sort(key=lambda x: x[0], reverse=True)
         best_reason = aturan_aktif[0][2]
 
-    # Kalikan dengan kesesuaian budget (bobot budget)
-    skor_final = round(skor_raw * mu_budget, 4)
-
-    # Tentukan label interpretasi
-    if skor_final >= 70:
-        label = "Sangat Direkomendasikan"
-    elif skor_final >= 40:
-        label = "Cukup Direkomendasikan"
-    else:
-        label = "Tidak Direkomendasikan"
-
-    alasan_str = (
-        f"[SUGENO] Weighted Average: z_crisp={skor_raw:.2f} x budget_match={mu_budget:.2f} "
-        f"= {skor_final:.2f}. Alasan utama: {best_reason}"
-    )
+    alasan_str = f"Skor Fuzzy: {skor_final:.1f}/100. Alasan utama: {best_reason}"
 
     return skor_final, alasan_str, label
 
@@ -272,6 +200,11 @@ def main():
                     "storage": f"{int(laptop.get('storage_gb', 0))} GB",
                     "display": f"{laptop.get('display_size', 0)}\"",
                     "os"     : laptop.get("Sistem Operasi", "N/A"),
+                    "garansi": laptop.get("Garansi", "-"),
+                    "tipe_layar": laptop.get("Tipe Layar", "-"),
+                    "keyboard": laptop.get("Keyboard", "-"),
+                    "berat"  : laptop.get("Berat", "-"),
+                    "dimensi": laptop.get("Dimensi", "-"),
                     "score"  : skor,
                     "reason" : alasan,
                     "label"  : label,
@@ -280,9 +213,9 @@ def main():
         except Exception:
             continue  # Lewati laptop yang gagal diproses
 
-    # Urutkan dari skor tertinggi, ambil 12 terbaik
+    # Urutkan dari skor tertinggi, ambil 10 terbaik
     results.sort(key=lambda x: x["score"], reverse=True)
-    print(json.dumps(results[:12], ensure_ascii=False))
+    print(json.dumps(results[:10], ensure_ascii=False))
 
 
 if __name__ == "__main__":

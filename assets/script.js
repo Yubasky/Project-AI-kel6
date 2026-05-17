@@ -201,6 +201,27 @@ function showModal(laptop, rank) {
                     <div class="spec-value">${laptop.os}</div>
                 </div>
             </div>
+            <div class="modal-spec-item">
+                <i class='bx bx-mobile-landscape'></i>
+                <div>
+                    <div class="spec-label">TIPE LAYAR</div>
+                    <div class="spec-value">${laptop.tipe_layar || '-'}</div>
+                </div>
+            </div>
+            <div class="modal-spec-item">
+                <i class='bx bx-category-alt'></i>
+                <div>
+                    <div class="spec-label">KEYBOARD & DIMENSI</div>
+                    <div class="spec-value">${laptop.keyboard || '-'} • ${laptop.dimensi || '-'}</div>
+                </div>
+            </div>
+            <div class="modal-spec-item">
+                <i class='bx bx-shield-quarter'></i>
+                <div>
+                    <div class="spec-label">BERAT & GARANSI</div>
+                    <div class="spec-value">${laptop.berat || '-'} • ${laptop.garansi || '-'}</div>
+                </div>
+            </div>
         </div>
 
         <!-- Alasan Fuzzy -->
