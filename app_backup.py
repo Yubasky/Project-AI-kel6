@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # Load and clean dataset globally
 try:
-    df = pd.read_csv('laptop_data_cleaned (2).csv')
+    df = pd.read_csv('laptop_data_cleaned_final.csv')
     
     # Rename 'Unnamed: 0' or 'Unnamed: 0.1' to 'nomor'
     if 'Unnamed: 0.1' in df.columns:

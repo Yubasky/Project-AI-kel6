@@ -49,7 +49,7 @@ if (!in_array($method, ['sugeno', 'tsukamoto'])) {
 // ================================================================
 // 2. BACA DAN PARSE DATASET CSV
 // ================================================================
-$csvPath = __DIR__ . '/../laptop_data_cleaned (2).csv';
+$csvPath = __DIR__ . '/../laptop_data_cleaned_final.csv';
 
 if (!file_exists($csvPath)) {
     echo json_encode(['error' => "File dataset tidak ditemukan: $csvPath"]);
