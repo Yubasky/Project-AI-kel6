@@ -10,7 +10,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # 1. PREPROCESSING DATA
 # =====================================================================
 print("Memuat dan memproses data...")
-df = pd.read_csv('laptop_data_cleaned (2).csv')
+df = pd.read_csv('laptop_data_cleaned_final.csv')
 
 def parse_harga(x):
     # Hapus "Rp" dan titik, ubah ke integer
